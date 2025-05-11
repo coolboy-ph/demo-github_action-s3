@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Earthquake Finder Demo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+
+  <style>
+    :root {
+      --bg-color: #f0f2f5;
+      --card-bg: #ffffff;
+      --primary: #1e88e5;
+      --text: #333;
+      --shadow: rgba(0, 0, 0, 0.1);
+    }
+
+    body {
+      margin: 0;
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text);
+      padding: 20px;
+    }
+
+    h1 {
+      text-align: center;
+      font-weight: 600;
+      color: var(--primary);
+      margin-bottom: 20px;
+    }
+
+    .search-container {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-bottom: 20px;
+      gap: 10px;
+    }
+
+    input[type="text"],
+    input[type="date"] {
+      flex: 1 1 200px;
+      padding: 12px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer; /* Ensures pointer cursor is shown when hovering over the input */
+    }
+
+    button {
+      background-color: var(--primary);
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+
+    button:hover {
+      background-color: #1565c0;
+    }
+
+    .results {
+      display: grid;
+      gap: 16px;
+    }
+
+    .quake-card {
+      background: var(--card-bg);
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px var(--shadow);
+    }
+
+    .quake-card strong {
+      font-size: 18px;
+      color: var(--primary);
+    }
+
+    .error, .no-results, .loading {
+      text-align: center;
+      margin-top: 20px;
+    }
+
+    .error { color: red; }
+    .loading { color: #666; }
+
+    #map {
+      height: 400px;
+      margin-top: 20px;
+    }
+
+    .toggle-sort-btn {
+      margin-top: 20px;
+      padding: 10px 20px;
+      background-color: #4caf50;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+
+    .toggle-sort-btn:hover {
+      background-color: #45a049;
+    }
+
+    @media (max-width: 600px) {
+      button {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🌍 Earthquake Finder</h1>
+
+  <div class="search-container">
+    <input type="text" id="locationInput" placeholder="Enter location (e.g., Myanmar)" />
+    <input type="date" id="startDate" onclick="this.showPicker()" />
+    <input type="date" id="endDate" onclick="this.showPicker()" />
+    <button onclick="searchEarthquakes()">Search</button>
+  </div>
+
+  <!-- Toggle sort order button -->
+  <button id="toggleSortBtn" class="toggle-sort-btn" onclick="toggleSortOrder()">Sort by Newest First</button>
+
+  <div id="results" class="results"></div>
+
+  <!-- Map container -->
+  <div id="map"></div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+  <script>
+    // Initialize the map (centered to a default location)
+    var map = L.map('map').setView([20, 0], 2); // Default view is set to (20, 0) (center of the world)
+
+    // Add a tile layer to the map (OpenStreetMap tiles)
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    let sortOrder = 'oldest'; // Default sort order is 'oldest'
+
+    // Function to search for earthquakes
+    async function searchEarthquakes() {
+      const location = document.getElementById("locationInput").value.trim();
+      let startDate = document.getElementById("startDate").value;
+      let endDate = document.getElementById("endDate").value;
+      const resultsDiv = document.getElementById("results");
+      resultsDiv.innerHTML = "<p class='loading'>Searching, please wait...</p>";
+
+      if (!location || !startDate) {
+        resultsDiv.innerHTML = "<p class='error'>Please enter location and start date.</p>";
+        return;
+      }
+
+      // If endDate is missing, treat it as the same day as startDate
+      if (!endDate) {
+        endDate = startDate;
+      }
+
+      // Format the start date to 00:00:00 UTC and end date to 23:59:59.999 UTC
+      const formattedStartDate = formatDateToUTC(startDate, '00:00:00');
+      const formattedEndDate = formatDateToUTC(endDate, '23:59:59.999');
+
+      try {
+        const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(location)}`);
+        const geoData = await geoRes.json();
+
+        if (!geoData.length) {
+          resultsDiv.innerHTML = `<p class='error'>Location not found: "${location}".</p>`;
+          return;
+        }
+
+        const lat = geoData[0].lat;
+        const lon = geoData[0].lon;
+
+        const radiusKm = 1000;
+        const usgsUrl = `https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&latitude=${lat}&longitude=${lon}&maxradiuskm=${radiusKm}&starttime=${formattedStartDate}&endtime=${formattedEndDate}&orderby=time`;
+
+        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(usgsUrl)}`;
+        const quakeRes = await fetch(proxyUrl);
+        const quakeJson = await quakeRes.json();
+        const quakeData = JSON.parse(quakeJson.contents);
+
+        // Clear the previous results
+        resultsDiv.innerHTML = "";
+        if (!quakeData.features.length) {
+          resultsDiv.innerHTML = `<p class='no-results'>No earthquakes found near "${location}" for selected dates.</p>`;
+          return;
+        }
+
+        // Sort earthquakes based on current sort order
+        if (sortOrder === 'oldest') {
+          quakeData.features.sort((a, b) => new Date(a.properties.time) - new Date(b.properties.time));
+        } else {
+          quakeData.features.sort((a, b) => new Date(b.properties.time) - new Date(a.properties.time));
+        }
+
+        // Loop through the sorted earthquake data and create HTML cards
+        quakeData.features.forEach(eq => {
+          const div = document.createElement("div");
+          div.className = "quake-card";
+          div.innerHTML = `
+            <strong>${eq.properties.place}</strong><br>
+            <span>Magnitude: ${eq.properties.mag}</span><br>
+            <span>Time: ${new Date(eq.properties.time).toLocaleString()}</span>
+          `;
+          resultsDiv.appendChild(div);
+
+          // Add a marker to the map for each earthquake
+          const latLng = [eq.geometry.coordinates[1], eq.geometry.coordinates[0]]; // [lat, lon]
+          const marker = L.marker(latLng).addTo(map);
+          marker.bindPopup(`
+            <strong>${eq.properties.place}</strong><br>
+            Magnitude: ${eq.properties.mag}<br>
+            Time: ${new Date(eq.properties.time).toLocaleString()}
+          `);
+        });
+
+        // Adjust map view to show all markers
+        const bounds = new L.LatLngBounds(quakeData.features.map(eq => [
+          eq.geometry.coordinates[1], eq.geometry.coordinates[0]
+        ]));
+        map.fitBounds(bounds);
+
+      } catch (err) {
+        console.error(err);
+        resultsDiv.innerHTML = "<p class='error'>An error occurred. Please try again.</p>";
+      }
+    }
+
+    // Function to toggle sorting order
+    function toggleSortOrder() {
+      if (sortOrder === 'oldest') {
+        sortOrder = 'newest';
+        document.getElementById('toggleSortBtn').innerText = 'Sort by Oldest First';
+      } else {
+        sortOrder = 'oldest';
+        document.getElementById('toggleSortBtn').innerText = 'Sort by Newest First';
+      }
+
+      // Re-run the search to apply the new sort order
+      searchEarthquakes();
+    }
+
+    // Function to format dates to UTC
+    function formatDateToUTC(date, time) {
+      const [year, month, day] = date.split("-");
+      const dateString = `${year}-${month}-${day}T${time}Z`;
+      return dateString;
+    }
+
+    // Ensure map re-centers to new data when the search is performed
+    map.invalidateSize();
+  </script>
+
+</body>
+</html>
