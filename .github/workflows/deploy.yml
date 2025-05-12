@@ -22,4 +22,4 @@ jobs:
 
       - name: Sync to S3
         run: |
-          aws s3 sync . s3://earthquake-app-demo  --delete --exclude ".git/*"
+          aws s3 sync . s3://earthquake-app-demo  --delete --exclude ".github/*"
