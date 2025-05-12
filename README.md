@@ -51,10 +51,10 @@ Structure your repo like:
 
 ```bash
 📁 your-repo/
- ┣ 📄 index.html
- ┣ 📄 README.md
  ┣ 📁 .github/workflows/
     ┗ 📄 deploy.yml
+ ┣ 📁 webpage
+ ┣ 📄 README.md
 ```
 
 ### Step 4: GitHub Actions CI/CD Setup
@@ -85,7 +85,7 @@ jobs:
 
       - name: Sync to S3
         run: |
-          aws s3 sync . s3://your-bucket-name --delete --exclude ".*" --exclude "*.md"
+          aws s3 sync webpage/ s3://earthquake-app-demo --delete
 ```
 
 ### Step 5: Add GitHub Secrets
