@@ -22,4 +22,4 @@ jobs:
 
       - name: Sync to S3
         run: |
-          aws s3 sync . s3://earthquake-app-demo  --delete --exclude ".*"
+          aws s3 sync . s3://earthquake-app-demo  --delete --exclude ".*" --exclude "*.md"
