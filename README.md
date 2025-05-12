@@ -52,6 +52,7 @@ Structure your repo like:
 ```bash
 📁 your-repo/
  ┣ 📄 index.html
+ ┣ 📄 README.md
  ┣ 📁 .github/workflows/
     ┗ 📄 deploy.yml
 ```
@@ -84,7 +85,7 @@ jobs:
 
       - name: Sync to S3
         run: |
-          aws s3 sync . s3://your-bucket-name --delete --exclude ".*"
+          aws s3 sync . s3://your-bucket-name --delete --exclude ".*" --exclude "*.md"
 ```
 
 ### Step 5: Add GitHub Secrets
